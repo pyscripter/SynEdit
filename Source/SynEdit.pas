@@ -2517,6 +2517,7 @@ begin
   if Highlighter <> nil then
   begin
     Highlighter.ResetRange;
+    Highlighter.SetLine('', 1);  // Workaround for SynHighlighterWeb
     Attri := Highlighter.WhitespaceAttribute;
     if (Attri <> nil) and (Attri.Background <> clNone) then
       EdBkgrColor := Attri.Background;
@@ -2564,7 +2565,10 @@ var
     if fHighlighter <> nil then
     begin
       if ResetHighlighter then
+      begin
         fHighlighter.ResetRange;
+        fHighlighter.SetLine('', 1);  // workaround for SynHighlighterWeb
+      end;
       Attr := Highlighter.WhitespaceAttribute;
       if Attr <> nil then
         if Bkground and (Attr.Background <> clNone) then
@@ -2891,6 +2895,20 @@ var
   end;
 
   procedure TextRangeToDisplay(const S: string; out FirstChar, LastChar: Integer);
+  {
+    When LeftChar > 1, we try to rended only the text that is visible.  This
+    is particularly important when the edited text contains super long lines.
+    FirstChar is the first char that should be displayed, which could be
+    partially visible.  The presence of tabs prevents the use of this
+    optimization.
+
+    This routine also adjust XRowOffset.
+
+    Text is painted at fTextOffset + XRowOffset
+    fTextOffset := fGutterWidth + fTextMargin - (LeftChar - 1) * fCharWidth;
+    fTextOffset can be negative.
+  }
+
   var
     HasTabs: Boolean;
     I: Integer;
@@ -2924,7 +2942,7 @@ var
       Inc(LastChar);
 
     // If there are tabs *inside* the displayed range we need to make sure
-    // the are rendered at the correct place
+    // they are rendered at the correct place
     HasTabs := False;
     for I := FirstChar to LastChar do
       if S[I] = #9 then
@@ -2964,7 +2982,6 @@ var
   DoTabPainting: Boolean;
   Layout: TSynTextLayout;
   BGColor, FGColor, TabColor: TColor;
-  Token: string;
   TokenPos, TokenLen: Integer;
   Attr: TSynHighlighterAttributes;
   LineIndicators: TArray<TSynIndicator>;
@@ -3032,56 +3049,85 @@ begin
 
     // Special colors, full line selection and ActiveLineColor
     FullRowColors(Row, Line, FullRowBG, FullRowFG, BGAlpha);
-    AColor := FullRowBG;
-    if (AColor = clNone) and (WhitespaceColor <> BGColor) then
-      AColor := WhiteSpaceColor; // Whitespace color may differ per line
-    if AColor <> clNone then
+    if FullRowBG <> clNone then
       RT.FillRectangle(Rect(LinesRect.Left, YRowOffset(Row), LinesRect.Right,
         YRowOffset(Row + 1)), TSynDWrite.SolidBrush(FullRowBG));
 
     // Highlighted tokens
-    if (fHighlighter <> nil) and (LastChar > 0) then
+    if fHighlighter <> nil then
     begin
+      // Optimization.  In WordWrap mode we carry on where the previous row ended,
+      // if they are parts of the same line.  So, each line is scanned once.
       if not WordWrap or (Row = aFirstRow) or (CharOffset = 1) then
       begin
         if Line > 1 then
-          fHighlighter.SetRange(TSynEditStringList(Lines).Ranges[Line - 2]);
+          fHighlighter.SetRange(TSynEditStringList(Lines).Ranges[Line - 2])
+        else
+          fHighlighter.ResetRange;
         FHighlighter.SetLine(SLine, Line);
       end;
 
-      while not FHighLighter.GetEol do
-      begin
-        TokenPos := FHighLighter.GetTokenPos - CharOffset - FirstChar + 3; //TokenPos is zero based
-        if TokenPos > LastChar - FirstChar + 1 then Break;
-        if TokenPos + FHighLighter.GetTokenLength <= 1 then
-        begin
-          fHighlighter.Next;
-          Continue;
-        end;
-        Token := FHighLighter.GetToken;
-        Attr := FHighLighter.GetTokenAttribute;
-
-        if (Token <> '') and Assigned(Attr) then
-        begin
-          Layout.SetFontStyle(Attr.Style, TokenPos, Token.Length);
-          AColor := Attr.Foreground;
-          if (FullRowFG = clNone) and (AColor <> clNone) then
-            Layout.SetFontColor(AColor, TokenPos, Token.Length);
-          AColor := Attr.Background;
-          if (FullRowBG = clNone) and (AColor <> clNone) then
-            PaintTokenBackground(Layout, Row, TokenPos, Token.Length, D2D1ColorF(AColor));
-        end;
-        if TokenPos + Token.Length - 1 > LastChar - FirstChar + 1 then
-          Break
-        else
-          FHighLighter.Next;
+      //  Whitespace color (returned by GetDefaultAttribute) may differ per line
+      //  Done here so that the highlighter range is set correctly
+      if (FullRowBG = clNone) then begin
+        AColor := WhitespaceColor(True);
+        if (AColor <> clNone) and (AColor <> BGColor) then
+        RT.FillRectangle(Rect(LinesRect.Left, YRowOffset(Row), LinesRect.Right,
+          YRowOffset(Row + 1)), TSynDWrite.SolidBrush(AColor));
       end;
-      if (eoShowSpecialChars in fOptions) and (FullRowFG = clNone) and
-        (CharOffset + LastChar = SLine.Length + 2) and
-        Assigned(fHighlighter.WhitespaceAttribute) and
-        (fHighlighter.WhitespaceAttribute.Foreground <> clNone)
-      then
-        Layout.SetFontColor(fHighlighter.WhitespaceAttribute.Foreground, LastChar - FirstChar + 1, 1);
+
+      // When you scroll to the right the whole row may be hidden
+      if (LastChar > 0) then
+      begin
+        while not FHighLighter.GetEol do
+        begin
+          // CharOffset adjusts for wrapped lines and FirstChar for LeftChar > 1
+          TokenPos := FHighLighter.GetTokenPos;  //TokenPos is zero based
+
+          // Check whether the start of the token is beyond the end of the row
+          // CharOffset points to the start of the row and LastChar is a row offset
+          if TokenPos - CharOffset + 2 > LastChar then Break;
+
+          TokenLen := FHighLighter.GetTokenLength;
+
+          // Skip if the whole token is on the left of FirstChar
+          if TokenPos + TokenLen - CharOffset  + 2 <= FirstChar then
+          begin
+            fHighlighter.Next;
+            Continue;
+          end;
+
+          // We need to display at least part of the token
+          // Adjust for CharOffset and FirstChar
+          Dec(TokenLen, Max(0,  FirstChar  - (TokenPos - CharOffset + 2)));
+          TokenPos := TokenPos - CharOffset - FirstChar + 3 +
+            Max(0,  FirstChar  - (TokenPos - CharOffset + 2));
+
+          Attr := FHighLighter.GetTokenAttribute;
+
+          if (TokenLen > 0) and Assigned(Attr) then
+          begin
+            Layout.SetFontStyle(Attr.Style, TokenPos, TokenLen);
+            AColor := Attr.Foreground;
+            if (FullRowFG = clNone) and (AColor <> clNone) then
+              Layout.SetFontColor(AColor, TokenPos, TokenLen);
+            AColor := Attr.Background;
+            if (FullRowBG = clNone) and (AColor <> clNone) then
+              PaintTokenBackground(Layout, Row, TokenPos, TokenLen, D2D1ColorF(AColor));
+          end;
+          // check whether the whole row has been painted
+          if TokenPos + TokenLen - 1 > LastChar - FirstChar + 1 then
+            Break
+          else
+            FHighLighter.Next;
+        end;
+        if (eoShowSpecialChars in fOptions) and (FullRowFG = clNone) and
+          (CharOffset + LastChar = SLine.Length + 2) and
+          Assigned(fHighlighter.WhitespaceAttribute) and
+          (fHighlighter.WhitespaceAttribute.Foreground <> clNone)
+        then
+          Layout.SetFontColor(fHighlighter.WhitespaceAttribute.Foreground, LastChar - FirstChar + 1, 1);
+      end;
     end;
 
     // Paint selection if Line is partially selected - deals with bidi text
@@ -6533,7 +6579,7 @@ end;
 function TCustomSynEdit.NextWordPosEx(const XY: TBufferCoord): TBufferCoord;
 var
   CX, CY, LineLen: Integer;
-  Line: string;
+  Line: UnicodeString;
 begin
   CX := XY.Char;
   CY := XY.Line;
@@ -6544,29 +6590,40 @@ begin
     Line := Lines[CY - 1];
 
     LineLen := Length(Line);
-    if CX >= LineLen then
+    if CX > LineLen then
     begin
-      // find first IdentChar or multibyte char in the next line
+      // invalid char
+      // find first non-whitespace char in the next line
       if CY < Lines.Count then
       begin
         Line := Lines[CY];
+        LineLen := Length(Line);
         Inc(CY);
-        CX := StrScanForCharInCategory(Line, 1, IsIdentChar);
-        if CX = 0 then
+        CX := 1;
+        while (CX <= LineLen) and IsWhiteChar(Line[CX]) do
           Inc(CX);
       end;
     end
     else
     begin
-      // find next word-break-char if current char is an IdentChar
-      if IsIdentChar(Line[CX]) then
-        CX := StrScanForCharInCategory(Line, CX, IsWordBreakChar);
-      // if word-break-char found, find the next IdentChar
-      if CX > 0 then
-        CX := StrScanForCharInCategory(Line, CX, IsIdentChar);
-      // if one of those failed just position at the end of the line
       if CX = 0 then
-        CX := LineLen + 1;
+        CX := 1;
+      // valid char
+      if IsIdentChar(Line[CX]) then begin
+        while (CX <= LineLen) and IsIdentChar(Line[CX]) do
+          Inc(CX);
+        while (CX <= LineLen) and IsWhiteChar(Line[CX]) do
+          Inc(CX);
+      end else if IsWhiteChar(Line[CX]) then begin
+        while (CX <= LineLen) and IsWhiteChar(Line[CX]) do
+          Inc(CX);
+      end else begin
+        // breakchar and not whitechar
+        while (CX <= LineLen) and (IsWordBreakChar(Line[CX]) and not IsWhiteChar(Line[CX])) do
+          Inc(CX);
+        while (CX <= LineLen) and IsWhiteChar(Line[CX]) do
+          Inc(CX);
+      end;
     end;
   end;
   Result.Char := CX;
@@ -6622,10 +6679,11 @@ end;
 function TCustomSynEdit.PrevWordPosEx(const XY: TBufferCoord): TBufferCoord;
 var
   CX, CY: Integer;
-  Line: string;
+  Line: UnicodeString;
 begin
   CX := XY.Char;
   CY := XY.Line;
+
   // valid line?
   if (CY >= 1) and (CY <= Lines.Count) then
   begin
@@ -6634,33 +6692,47 @@ begin
 
     if CX <= 1 then
     begin
-      // find last IdentChar in the previous line
+      // skip whitespace at the end of the previous line
       if CY > 1 then
       begin
         Dec(CY);
         Line := Lines[CY - 1];
         CX := Length(Line) + 1;
+        while (CX > 1) and IsWhiteChar(Line[CX-1]) do
+          Dec(CX);
       end;
     end
     else
     begin
-      // if previous char is a word-break-char search for the last IdentChar
-      if IsWordBreakChar(Line[CX - 1]) then
-        CX := StrRScanForCharInCategory(Line, CX - 1, IsIdentChar);
-      if CX > 0 then
-        // search for the first IdentChar of this "word"
-        CX := StrRScanForCharInCategory(Line, CX - 1, IsWordBreakChar) + 1;
-      if CX = 0 then
-      begin
-        // else just position at the end of the previous line
-        if CY > 1 then
-        begin
-          Dec(CY);
-          Line := Lines[CY - 1];
-          CX := Length(Line) + 1;
-        end
-        else
-          CX := 1;
+      // CX > 1 and <= LineLenght + 1
+      if IsIdentChar(Line[CX-1]) then begin
+        while (CX > 1) and IsIdentChar(Line[CX-1]) do
+          Dec(CX);
+      end else if IsWhiteChar(Line[CX-1]) then begin
+        while (CX > 1) and IsWhiteChar(Line[CX-1]) do
+          Dec(CX);
+        if CX <= 1 then begin
+          // skip whitespace at the end of the previous line
+          if CY > 1 then
+          begin
+            Dec(CY);
+            Line := Lines[CY - 1];
+            CX := Length(Line) + 1;
+            while (CX > 1) and IsWhiteChar(Line[CX-1]) do
+              Dec(CX);
+          end;
+        end else if IsIdentChar(Line[CX-1]) then begin
+          while (CX > 1) and IsIdentChar(Line[CX-1]) do
+            Dec(CX);
+        end else begin
+          // breakchar and not whitechar
+          while (CX > 1) and (IsWordBreakChar(Line[CX-1]) and not IsWhiteChar(Line[CX-1])) do
+            Dec(CX);
+        end;
+      end else begin
+        // breakchar and not whitechar
+        while (CX > 1) and (IsWordBreakChar(Line[CX-1]) and not IsWhiteChar(Line[CX-1])) do
+          Dec(CX);
       end;
     end;
   end;
@@ -7236,23 +7308,27 @@ begin
     bSetDrag := (eoDropFiles in fOptions) <> (eoDropFiles in Value);
     bInvalidate := (eoShowSpecialChars in fOptions) <> (eoShowSpecialChars in Value);
     bUpdateScroll := (Options * ScrollOptions) <> (Value * ScrollOptions);
-    CalcTextAreaWidth;  // in case eoWrapWithRightEdge changed
+    fOptions := Value;
 
     FUndoRedo.GroupUndo := eoGroupUndo in Options;
 
-    if not (eoScrollPastEol in Options) then
-      LeftChar := LeftChar;
-    if not (eoScrollPastEof in Options) then
-      TopLine := TopLine;
-    fOptions := Value;
+    if HandleAllocated then
+    begin
+      CalcTextAreaWidth;  // in case eoWrapWithRightEdge changed
 
-    // (un)register HWND as drop target
-    if bSetDrag and not (csDesigning in ComponentState) and HandleAllocated then
-      DragAcceptFiles(Handle, (eoDropFiles in fOptions));
-    if bInvalidate then
-      Invalidate;
-    if bUpdateScroll then
-      UpdateScrollBars;
+      if not (eoScrollPastEol in Options) then
+        LeftChar := LeftChar;
+      if not (eoScrollPastEof in Options) then
+        TopLine := TopLine;
+
+      // (un)register HWND as drop target
+      if bSetDrag and not (csDesigning in ComponentState) then
+        DragAcceptFiles(Handle, (eoDropFiles in fOptions));
+      if bInvalidate then
+        Invalidate;
+      if bUpdateScroll then
+        UpdateScrollBars;
+    end;
   end;
 end;
 
@@ -7446,14 +7522,16 @@ end;
 
 procedure TCustomSynEdit.HighlightBrackets;
 
-  function PosHasBracket(Pos: TBufferCoord): Boolean;
+  function PosHasBracket(Pos: TBufferCoord; const Line: string): Boolean;
   var
     Token: string;
     Attri: TSynHighlighterAttributes;
   begin
-    Result := GetHighlighterAttriAtRowCol(Pos, Token, Attri) and
-      (Attri = fHighlighter.SymbolAttribute) and (Token.Length = 1) and
-      (fHighlighter.Brackets.IndexOf(Token[1]) >= 0);
+    Result := (Pos.Char <= Line.Length) and
+     (fHighlighter.Brackets.IndexOf(Line[Pos.Char]) >= 0) and
+     GetHighlighterAttriAtRowCol(Pos, Token, Attri) and
+     (Attri <> fHighlighter.CommentAttribute) and
+     (Attri <> fHighlighter.StringAttribute);
   end;
 
 var
@@ -7461,6 +7539,7 @@ var
   MatchingBracketPos: TBufferCoord;
   HasBracket: Boolean;
   Indicator: TSynIndicator;
+  Line: string;
 begin
   if (eoBracketsHighlight in FOptions) and Assigned(fHighlighter) then
   begin
@@ -7468,16 +7547,17 @@ begin
     Indicators.Clear(BracketsHighlight.UnbalancedBracketIndicatorID);
 
     BracketPos := CaretXY;
-    MatchingBracketPos := BufferCoord(0,0);
+    if BracketPos.Line > Lines.Count then Exit;
+    Line := Lines[BracketPos.Line - 1];
 
     // First Look at the previous character like Site
     if BracketPos.Char > 1 then Dec(BracketPos.Char);
-    HasBracket := PosHasBracket(BracketPos);
+    HasBracket := PosHasBracket(BracketPos, Line);
     //if it is not a bracket then look at the next character;
     if not HasBracket and (CaretX > 1) then
     begin
       Inc(BracketPos.Char);
-      HasBracket := PosHasBracket(BracketPos);
+      HasBracket := PosHasBracket(BracketPos, Line);
     end;
 
     if HasBracket then
