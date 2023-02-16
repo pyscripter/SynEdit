@@ -1152,6 +1152,7 @@ begin
         case P^ of
            #9: Inc(W, fTabWidth * fCharWidth - W mod (fTabWidth * fCharWidth));
            #32..#126: Inc(W, FCharWidth);
+           #160: Inc(W, FCharWidth);
          else
            break;
          end;
@@ -1226,6 +1227,7 @@ begin
       case P^ of
          #9: Inc(Result, fTabWidth * fCharWidth - Result mod (fTabWidth * fCharWidth));
          #32..#126: Inc(Result, FCharWidth);
+         #160: Inc(Result, FCharWidth);
        else
          break;
        end;
@@ -2064,7 +2066,7 @@ begin
   P := PChar(Line);
   if Assigned(P) then
   begin
-    while (P^ >= #1) and (P^ <= #32) do
+    while ((P^ >= #1) and (P^ <= #32)) or (P^ = #160) do
     begin
       if (P^ = #9) and ExpandTabs then
         Inc(Result, TabWidth - (Result mod FTabWidth))
@@ -3013,7 +3015,7 @@ begin
     if (eoShowSpecialChars in fOptions) and (LastChar >= 0) then
     begin
       for I := FirstChar to LastChar do
-        if SRow[I] = #32 then
+        if (SRow[I] = #32) or (SRow[I] = #160) then
           SRow[I] := SynSpaceGlyph
         else if SRow[I] = #9 then
           DoTabPainting := True;
@@ -5857,6 +5859,7 @@ begin
       case P^ of
          #9: Inc(Result, fTabWidth * fCharWidth - Result mod (fTabWidth * fCharWidth));
          #32..#126: Inc(Result, FCharWidth);
+         #160: Inc(Result, FCharWidth);
        else
          break;
        end;
@@ -7680,14 +7683,14 @@ begin
           p := @PrevLine[MinLen];
           // scan over non-whitespaces
           repeat
-            if (p^ = #9) or (p^ = #32) then break;
+            if (p^ = #9) or (p^ = #32) or (p^ = #160) then break;
             Inc(i);
             Inc(p);
           until p^ = #0;
           // scan over whitespaces
           if p^ <> #0 then
             repeat
-              if (p^ <> #9) and (p^ <> #32) then break;
+              if (p^ <> #9) and (p^ <> #32) and (p^ <> #160) then break;
               Inc(i);
               Inc(p);
             until p^ = #0;
@@ -8027,7 +8030,7 @@ procedure TCustomSynEdit.DoBlockUnindent;
     //Deal with compound tabwidths  Sometimes they have TabChars after a few
     //spaces, yet we need to delete the whole tab width even though the char
     //count might not be FTabWidth because of the TabChar
-    while (Run[0] = #32) and (Result < FTabWidth) do
+    while ((Run[0] = #32) or (Run[0] = #160)) and (Result < FTabWidth) do
     begin
       Inc(Result);
       Inc(Run);
