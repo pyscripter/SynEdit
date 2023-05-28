@@ -1,4 +1,4 @@
-{-------------------------------------------------------------------------------
+ï»¿{-------------------------------------------------------------------------------
 The contents of this file are subject to the Mozilla Public License
 Version 1.1 (the "License"); you may not use this file except in compliance
 with the License. You may obtain a copy of the License at
@@ -12,8 +12,8 @@ mwEdit component suite by Martin Waldenburg and other developers, the Initial
 Author of this file is Michael Hieke.
 Portions created by Michael Hieke are Copyright 2000 Michael Hieke.
 Portions created by James D. Jacobson are Copyright 1999 Martin Waldenburg.
-Changes to emit XHTML 1.0 Strict complying code by Maël Hörz.
-Unicode translation by Maël Hörz.
+Changes to emit XHTML 1.0 Strict complying code by MaÃ«l HÃ¶rz.
+Unicode translation by MaÃ«l HÃ¶rz.
 All Rights Reserved.
 Contributors to the SynEdit project are listed in the Contributors.txt file.
 Alternatively, the contents of this file may be used under the terms of the
@@ -51,7 +51,6 @@ type
   private
     FStyleNameCache: TDictionary<TSynHighlighterAttributes, string>;
     FStyleValueCache: TDictionary<TSynHighlighterAttributes, string>;
-    FAddNewLine: Boolean;
     FSuppressFragmentInfo: boolean;
     function AttriToCSS(Attri: TSynHighlighterAttributes;
       UniqueAttriName: string): string;
@@ -74,7 +73,6 @@ type
     // Note: SynEdit's default OLE clipboard handling bypasses SynEditExport's clipboard handling.
     FCreateHTMLFragment: boolean;   // True if format should be "HTML Format", always uses inline css.
     FInlineCSS: boolean;
-    procedure SetTokenAttribute(Attri: TSynHighlighterAttributes); override;
     procedure FormatAfterLastAttribute; override;
     procedure FormatAttributeDone(BackgroundChanged, ForegroundChanged: boolean;
       FontStylesChanged: TFontStyles); override;
@@ -122,25 +120,26 @@ uses
 const
   DetailLength = 105;  // This is the fixed length of the filled-in DetailSection.
   DetailSection = 'Version:0.9'#13#10 +
-                 'StartHTML:%.10d'#13#10 +
-                 'EndHTML:%.10d'#13#10 +
-                 'StartFragment:%.10d'#13#10 +
-                 'EndFragment:%.10d'#13#10;
+                  'StartHTML:%.10d'#13#10 +
+                  'EndHTML:%.10d'#13#10 +
+                  'StartFragment:%.10d'#13#10 +
+                  'EndFragment:%.10d'#13#10;
 
-  HTMLStartText = '<html>'#13#10;
-  HeadStartText = '<head>'#13#10;
+  DocType       = '<!DOCTYPE html>' + sLineBreak;
+  HTMLStartText =  '<html>' + sLineBreak;
+  HeadStartText = '<head>' + sLineBreak + '<meta charset="utf-8">' + sLineBreak;
 
-  StyleStartText = '<style type="text/css">'#13#10 + '<!--'#13#10;
-  BodyStyleTextFormat = 'body { color: %s; background-color: %s; }'#13#10;
-  StyleEndText = '-->'#13#10 + '</style>'#13#10;
+  StyleStartText = '<style>' + sLineBreak + '<!--' + sLineBreak;
+  BodyStyleTextFormat = 'body { color: %s; background-color: %s; }' + sLineBreak;
+  StyleEndText = '-->' + sLineBreak + '</style>' + sLineBreak;
 
-  HeadEndText = '</head>'#13#10;
-  BodyStartText   = '<body>'#13#10;
+  HeadEndText = '</head>' + sLineBreak;
+  BodyStartText   = '<body>' + sLineBreak;
 
   FragmentStartText = '<!--StartFragment-->';
   FragmentEndText =   '<!--EndFragment-->';
 
-  BodyEndText   = '</body>'#13#10;
+  BodyEndText   = '</body>' + sLineBreak;
   HTMLEndText   = '</html>';
 
 
@@ -226,7 +225,6 @@ begin
     FStyleNameCache.Clear;
   if Assigned(FStyleValueCache) then
     FStyleValueCache.Clear;
-  FAddNewLine := False;
 end;
 
 function TSynExporterHTML.ColorToHTML(AColor: TColor): string;
@@ -258,35 +256,15 @@ begin
   end;
 end;
 
-procedure TSynExporterHTML.SetTokenAttribute(Attri: TSynHighlighterAttributes);
-begin
-  inherited;
-  // If a newline happens while there are tokens with no attributes we add <br>s
-  if FAddNewLine then
-  begin
-    AddData('<br>');
-    FAddNewLine := False;
-  end;
-end;
-
 procedure TSynExporterHTML.FormatAfterLastAttribute;
 begin
-  if FAddNewLine then
-    AddData('</span><br></div></div>')
-  else
-    AddData('</span></div></div>');
+  AddData('</span>' + sLineBreak + '</pre>');
 end;
 
 procedure TSynExporterHTML.FormatAttributeDone(BackgroundChanged,
   ForegroundChanged: boolean; FontStylesChanged: TFontStyles);
 begin
-  if FAddNewLine then
-  begin
-    AddData('</span></div><div>');
-    FAddNewLine := False;
-  end
-  else
-    AddData('</span>');
+  AddData('</span>');
 end;
 
 procedure TSynExporterHTML.FormatAttributeInit(BackgroundChanged,
@@ -318,15 +296,15 @@ var
 begin
   // Cache all our CSS values.
   EnumHighlighterAttris(Highlighter, True, AttriToInlineCSSCallback, []);
-  AddData('<div style="font-family: ' + FFont.Name + ', ''Courier New'', monospace; font-size: ' +
-    FFont.Size.ToString + 'pt; white-space: pre; ">');
+  AddData('<pre style="font-family: ' + FFont.Name + ', ''Courier New'', monospace; font-size: ' +
+    FFont.Size.ToString + 'pt;">' + sLineBreak);
   if FCreateHTMLFragment or FInlineCSS then
   begin
     FStyleValueCache.TryGetValue(Highlighter.GetTokenAttribute, StyleValue);
     if StyleValue <> '' then
-      AddData('<div><span style="' + StyleValue + '">')
+      AddData('<span style="' + StyleValue + '">')
     else
-      AddData('<div><span>');
+      AddData('<span>');
   end
   else
   begin
@@ -337,12 +315,7 @@ end;
 
 procedure TSynExporterHTML.FormatNewLine;
 begin
-  if FAddNewLine then
-  begin
-    AddData('<br>');
-    FAddNewLine := False;
-  end;
-  FAddNewLine := True;
+  AddData(sLineBreak);
 end;
 
 function TSynExporterHTML.GetFooter: string;
@@ -351,7 +324,7 @@ begin
   if FCreateHTMLFragment and not FSuppressFragmentInfo then
     Result := Result + FragmentEndText;
   if not FCreateHTMLFragment then
-    Result := Result + #13#10 + BodyEndText + HTMLEndText;
+    Result := Result + sLineBreak + BodyEndText + HTMLEndText;
 end;
 
 function TSynExporterHTML.GetFormatName: string;
@@ -372,7 +345,7 @@ begin
   Header := HTMLStartText;
   if not FCreateHTMLFragment then
   begin
-    Header := Header +  HeadStartText;
+    Header := DocType + Header +  HeadStartText;
     Header := Header + '<title>' + Title + '</title>'#13#10;
     if not InlineCSS then
     begin
