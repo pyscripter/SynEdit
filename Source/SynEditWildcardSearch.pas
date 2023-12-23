@@ -62,7 +62,7 @@ type
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
-    function FindAll(const NewText: UnicodeString): Integer; override;
+    function FindAll(const NewText: UnicodeString; StartIndex: Integer = 1): Integer; override;
     function Replace(const aOccurrence, aReplacement: UnicodeString): UnicodeString; override;        //slm 11/29/02
   end;
 
@@ -84,9 +84,9 @@ begin
   inherited;
 end;
 
-function TSynEditWildcardSearch.FindAll(const NewText: UnicodeString): integer;
+function TSynEditWildcardSearch.FindAll(const NewText: UnicodeString; StartIndex: Integer = 1): integer;
 begin
-  Result := inherited FindAll(NewText);
+  Result := inherited FindAll(NewText, StartIndex);
 end;
 
 function TSynEditWildcardSearch.Replace(const aOccurrence, aReplacement: UnicodeString): UnicodeString;

@@ -64,7 +64,7 @@ type
     function GetResultCount: Integer; override;
   public
     constructor Create(AOwner: TComponent); override;
-    function FindAll(const NewText: string): Integer; override;
+    function FindAll(const NewText: string; StartIndex: Integer = 1): Integer; override;
     function PreprocessReplaceExpression(const AReplace: string): string; override;
     function Replace(const aOccurrence, aReplacement: string): string; override;
   end;
@@ -111,7 +111,7 @@ begin
   fOptions := [];
 end;
 
-function TSynEditRegexSearch.FindAll(const NewText: string): Integer;
+function TSynEditRegexSearch.FindAll(const NewText: string; StartIndex: Integer = 1): Integer;
 begin
   fMatchCollection :=  RegEx.Matches(NewText);
   Result := fMatchCollection.Count;

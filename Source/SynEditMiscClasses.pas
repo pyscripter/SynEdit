@@ -537,7 +537,7 @@ type
     function GetResultCount: Integer; virtual; abstract;
     procedure SetOptions(const Value: TSynSearchOptions); virtual; abstract;
   public
-    function FindAll(const NewText: string): Integer; virtual; abstract;
+    function FindAll(const NewText: string; StartIndex: Integer = 1): Integer; virtual; abstract;
     function PreprocessReplaceExpression(const AReplace: string)
       : string; virtual;
     function Replace(const aOccurrence, aReplacement: string): string;

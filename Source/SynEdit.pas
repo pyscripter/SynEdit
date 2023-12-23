@@ -7279,7 +7279,20 @@ begin
   try
     while (ptCurrent.Line >= ptStart.Line) and (ptCurrent.Line <= ptEnd.Line) do
     begin
-      nInLine := fSearchEngine.FindAll(Lines[ptCurrent.Line - 1]);
+      if bBackWard then
+      begin
+        if ptCurrent.Line = ptEnd.Line then
+          nInLine := SearchEngine.FindAll(Lines[ptCurrent.Line - 1], ptCurrent.Char)
+        else
+          nInLine := SearchEngine.FindAll(Lines[ptCurrent.Line - 1], Length(Lines[ptCurrent.Line - 1]) + 1);
+      end
+      else
+      begin
+        if ptCurrent.Line = ptStart.Line then
+          nInLine := SearchEngine.FindAll(Lines[ptCurrent.Line - 1], ptCurrent.Char)
+        else
+          nInLine := SearchEngine.FindAll(Lines[ptCurrent.Line - 1]);
+      end;
       iResultOffset := 0;
       if bBackward then
         n := Pred(fSearchEngine.ResultCount)

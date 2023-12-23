@@ -79,9 +79,9 @@ type
   public
     constructor Create(aOwner: TComponent); override;
     destructor Destroy; override;
-    function FindAll(const NewText: string): Integer; override;
+    function FindAll(const NewText: string; StartIndex: Integer = 1): Integer; override;
     function Replace(const aOccurrence, aReplacement: string): string; override;
-    function FindFirst(const NewText: string): Integer;
+    function FindFirst(const NewText: string; StartIndex: Integer = 1): Integer;
     procedure FixResults(First, Delta: Integer);
     function Next: Integer;
     property Count: Integer read fCount write fCount;
@@ -244,13 +244,13 @@ begin
   end;
 end;
 
-function TSynEditSearch.FindAll(const NewText: string): Integer;
+function TSynEditSearch.FindAll(const NewText: string; StartIndex: Integer = 1): Integer;
 var
   Found: Integer;
 begin
   // never shrink Capacity
   fResults.Count := 0;
-  Found := FindFirst(NewText);
+  Found := FindFirst(NewText, StartIndex);
   while Found > 0 do
   begin
     fResults.Add(Pointer(Found));
@@ -262,9 +262,9 @@ end;
 function TSynEditSearch.Replace(const aOccurrence, aReplacement: string): string;
 begin
   Result := aReplacement;
-end;                     
+end;
 
-function TSynEditSearch.FindFirst(const NewText: string): Integer;
+function TSynEditSearch.FindFirst(const NewText: string; StartIndex: Integer = 1): Integer;
 begin
   if not fShiftInitialized then
     InitShiftTable;
@@ -278,14 +278,14 @@ begin
       FTextToSearch := SysUtils.AnsiLowerCase(NewText);
     Origin := PWideChar(FTextToSearch);
     TheEnd := Origin + fTextLen;
-    Run := (Origin - 1);
+    Run := (Origin - 1) + (StartIndex - 1);
     Result := Next;
   end;
 end;
 
 function TSynEditSearch.GetLength(Index: Integer): Integer;
 begin
-  Result := PatLen;  
+  Result := PatLen;
 end;
 
 function TSynEditSearch.GetPattern: string;
