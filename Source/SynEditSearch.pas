@@ -278,7 +278,7 @@ begin
       FTextToSearch := SysUtils.AnsiLowerCase(NewText);
     Origin := PWideChar(FTextToSearch);
     TheEnd := Origin + fTextLen;
-    Run := (Origin - 1) + (StartIndex - 1);
+    Run := (Origin - 1);
     Result := Next;
   end;
 end;
