@@ -2810,6 +2810,8 @@ var
   begin
     if (Ch = #9) then // Tab
       PrintGlyph := SynTabGlyph
+    else if (Ch = #$3000) then // Ideographic space
+      PrintGlyph := SynIdeographicSpace
     else if not Ch.IsControl then
       PrintGlyph := SynSpaceGlyph
     else
