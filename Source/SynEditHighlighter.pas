@@ -1003,7 +1003,7 @@ begin
   case Ord(AChar) of
     0..32:
       Result := True;
-    $3000:
+    $3000:	 // Ideographic space
       Result := True;
     else
       Result := AChar.IsWhiteSpace and not IsIdentChar(AChar);
