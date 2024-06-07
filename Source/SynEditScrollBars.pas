@@ -334,6 +334,8 @@ begin
       ScrollInfo := GetBarScrollInfo(sbHorizontal);
       FOwner.LeftChar := ScrollInfo.nTrackPos;
       SetScrollBarPos(sbHorizontal, ScrollInfo.nTrackPos, False);
+      if AMsg.ScrollCode = SB_THUMBPOSITION then
+        FIsScrolling := False;
     end;
     SB_ENDSCROLL:
     begin
@@ -413,6 +415,8 @@ begin
           ScrollHint.Update;
         end;
         SetScrollBarPos(sbVertical, ScrollInfo.nTrackPos, False);
+        if AMsg.ScrollCode = SB_THUMBPOSITION then
+          FIsScrolling := False;
       end;
       // Ends scrolling
     SB_ENDSCROLL:
