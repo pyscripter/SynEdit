@@ -1021,6 +1021,7 @@ begin
     begin
       case Ord(AChar) of
       0..32: Result := True;
+      $00A0: Result := True;
       else
        Result := False;
       end;
