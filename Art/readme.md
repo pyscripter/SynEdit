@@ -10,8 +10,8 @@ trasparent and use colors that display reasonably well in both dark
 and light backgrounds.
 
 The generated png files then need to be inserted into the resource file 
-`SynEditReg.dcr'.  You can use [Resource Hacker](https://www.angusj.com/resourcehacker/) 
-to do that.
+`SynEditReg.dcr'.  You can use [Resource Hacker](https://www.angusj.com/resourcehacker/)
+or [Resource Cracker](https://www.pelock.com/products/resource-cracker) to do that.
 
 This [article](https://blogs.embarcadero.com/new-in-10-2-2-component-icons/) 
 by David Millington contains information about the use of png files as
